@@ -84,7 +84,7 @@
   }
 
   function greet() {
-    const name = (currentUser && AUTH_USERS[currentUser.role]?.username) || 'there';
+    const name = currentUser?.full_name || 'there';
     say(`Hi ${safe(name)}! I'm <b>FusionBot</b>. I can recommend dishes, add items to your cart, apply promo codes and track orders. Type <b>help</b> to see everything.`);
   }
 

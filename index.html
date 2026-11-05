@@ -21,9 +21,9 @@
 <link rel="stylesheet" href="compare.css">
 <link rel="stylesheet" href="track.css">
 <link rel="stylesheet" href="bot.css">
-<script src="script.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 <script src="supabase-client.js" defer></script>
+<script src="script.js" defer></script>
 <script src="compare.js" defer></script>
 <script src="track.js" defer></script>
 <script src="bot.js" defer></script>
@@ -34,7 +34,9 @@
 <div id="auth-view" class="auth">
   <section class="auth-art">
     <span class="glyph" aria-hidden="true">రుచి</span>
-    <a class="brand" href="#" onclick="return false"><b class="mark">F</b><span>FoodFusion</span></a>
+    <a class="brand" href="#" onclick="return false">
+      <b class="mark">F</b><span>FoodFusion</span>
+    </a>
     <div class="auth-copy">
       <h1>Sign in and pick your plate.</h1>
       <p>Biryani, tiffins, snacks, desserts and dinner. Cooked when you order.</p>
@@ -46,36 +48,38 @@
 
   <section class="auth-side">
     <div class="login-card">
-      <h2>Welcome back</h2>
-      <p class="muted">Choose your account type to enter the demo.</p>
-
-      <div class="roles" role="group" aria-label="Account type">
-        <button type="button" id="role-btn-customer" class="role active" onclick="selectLoginRole('customer')" aria-pressed="true">Customer</button>
-        <button type="button" id="role-btn-admin" class="role" onclick="selectLoginRole('admin')" aria-pressed="false">Restaurant admin</button>
-      </div>
+      <h2 id="auth-heading">Welcome back</h2>
+      <p class="muted" id="auth-description">Sign in to your FoodFusion account.</p>
 
       <form id="login-form" onsubmit="handleLogin(event)">
-        <label>Username
-          <input id="login-username" required placeholder="Enter username" autocomplete="username">
+        <label id="name-field" class="hidden">
+          Full name
+          <input id="login-name" type="text" placeholder="Enter your full name" autocomplete="name">
         </label>
-        <label>Password
+
+        <label>
+          Email address
+          <input id="login-email" type="email" required placeholder="Enter your email" autocomplete="email">
+        </label>
+
+        <label>
+          Password
           <span class="password">
-            <input id="login-password" type="password" required placeholder="Enter password" autocomplete="current-password">
+            <input id="login-password" type="password" required minlength="6" placeholder="Enter your password" autocomplete="current-password">
             <button type="button" onclick="togglePasswordVisibility(this)" aria-label="Show or hide password">Show</button>
           </span>
         </label>
-        <p id="login-error" class="error hidden" role="alert">That username or password is incorrect. Check the demo accounts below.</p>
-        <button class="btn primary wide">Sign in</button>
+
+        <p id="login-error" class="error hidden" role="alert"></p>
+
+        <button class="btn primary wide" id="auth-submit" type="submit">Sign in</button>
       </form>
 
-      <div class="demo">
-        <b>Demo accounts</b>
-        <div class="demo-actions">
-          <button type="button" class="btn ghost" onclick="quickFill('customer')">Fill customer login</button>
-          <button type="button" class="btn ghost" onclick="quickFill('admin')">Fill admin login</button>
-        </div>
-        <small>Customer: roshan / Rosh@5850<br>Admin: roshan / Rosh@1693</small>
-      </div>
+      <p class="muted" style="text-align:center;margin-top:18px">
+        <span id="auth-switch-text">Don't have an account?</span>
+        <button type="button" class="link" id="auth-switch" onclick="toggleAuthMode()">Create account</button>
+      </p>
+
       <small class="footnote">KL University · Student project prototype</small>
     </div>
   </section>
@@ -101,7 +105,7 @@
         </button>
         <div class="profile">
           <span class="avatar" id="logged-avatar">R</span>
-          <span class="who"><b id="logged-user-name">roshan</b><small id="logged-user-role">Customer</small></span>
+          <span class="who"><b id="logged-user-name">User</b><small id="logged-user-role">Account</small></span>
         </div>
         <button class="btn ghost small" onclick="handleLogout()">Sign out</button>
       </div>

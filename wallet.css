@@ -1,45 +1,172 @@
-/* FoodFusion wallet: wallet.css */
-.wl-chip{
-  display:inline-flex;align-items:center;gap:7px;border:1px solid var(--wl-line,#e8e4da);background:var(--wl-chip,#fff6dc);
-  color:var(--wl-text,#12372A);border-radius:999px;padding:6px 12px;font:600 13px 'Hanken Grotesk',system-ui,sans-serif;cursor:pointer;
-  transition:transform .15s,box-shadow .15s;
-}
-.wl-chip:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.12)}
-.wl-chip svg{width:16px;height:16px}
-.wl-chip.hidden{display:none!important}
-.wl-chip b{font-weight:800}
-@media (max-width:640px){.wl-chip span{display:none}}
+'use strict';
+/* =========================================================
+   FoodFusion wallet: wallet.js
+   - New users start with a ₹500 welcome balance
+   - Add money (demo), pay at checkout, refunds on cancel
+   Load this AFTER script.js
+   ========================================================= */
+(function () {
+  const KEY = 'ff_wallet_v1', WELCOME = 500, MAX_ADD = 10000;
+  const $ = id => document.getElementById(id);
 
-.wl-modal{
-  position:fixed;inset:0;z-index:950;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:16px;
-  --wl-bg:#fff;--wl-text:#1d1d1b;--wl-muted:#6b6b66;--wl-line:#e8e4da;--wl-accent:#F5B82E;--wl-ink:#12372A;--wl-soft:#f6f2e8;
-  font-family:'Hanken Grotesk',system-ui,sans-serif;
-}
-:root[data-theme="dark"] .wl-modal,:root[data-theme="dark"] .wl-chip{
-  --wl-bg:#1b1d1c;--wl-text:#f2efe6;--wl-muted:#a5a398;--wl-line:#33362f;--wl-soft:#262925;--wl-chip:#2a2c26;
-}
-.wl-modal.open{display:flex}
-.wl-card{
-  position:relative;width:min(420px,100%);max-height:90vh;overflow-y:auto;background:var(--wl-bg);color:var(--wl-text);
-  border-radius:20px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.35);animation:wlIn .2s ease;
-}
-@keyframes wlIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.wl-card h2{margin:0 0 14px;font-size:20px}
-.wl-card h3{margin:18px 0 8px;font-size:14px;color:var(--wl-muted);font-weight:600}
-.wl-close{position:absolute;top:12px;right:14px;border:0;background:none;color:inherit;font-size:26px;cursor:pointer;line-height:1}
-.wl-balance{background:linear-gradient(135deg,#F5B82E,#E0861C);color:#12372A;border-radius:16px;padding:16px 18px}
-.wl-balance small{display:block;opacity:.8;font-weight:600}
-.wl-balance b{font-size:34px;font-weight:800;letter-spacing:-.02em}
-.wl-add>span{display:block;margin:16px 0 8px;font-size:14px;color:var(--wl-muted);font-weight:600}
-.wl-quick{display:flex;gap:8px;flex-wrap:wrap}
-.wl-quick button{flex:1;min-width:80px;border:1px solid var(--wl-line);background:var(--wl-soft);color:var(--wl-text);border-radius:12px;padding:10px;font-weight:700;cursor:pointer}
-.wl-quick button:hover{border-color:var(--wl-accent)}
-.wl-custom{display:flex;gap:8px;margin-top:8px}
-.wl-custom input{flex:1;min-width:0;border:1px solid var(--wl-line);background:var(--wl-bg);color:var(--wl-text);border-radius:12px;padding:10px 12px;font:inherit}
-.wl-custom button{border:0;border-radius:12px;padding:0 18px;font-weight:700;cursor:pointer;background:var(--wl-ink);color:#fff}
-:root[data-theme="dark"] .wl-custom button{background:var(--wl-accent);color:#12372A}
-.wl-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--wl-line);font-size:14px}
-.wl-row small{display:block;color:var(--wl-muted);font-size:12px}
-.wl-row b.cr{color:#1c8a4b}.wl-row b.dr{color:#c0392b}
-.wl-empty{color:var(--wl-muted);font-size:14px;padding:8px 0}
-.wl-note{display:block;margin-top:14px;color:var(--wl-muted);font-size:12px}
+  /* ---------- storage ---------- */
+  function read() {
+    try { const w = JSON.parse(localStorage.getItem(KEY)); if (w && typeof w.balance === 'number' && Array.isArray(w.txns)) return w; } catch {}
+    return null;
+  }
+  let wallet = read() || { balance: WELCOME, txns: [{ type: 'credit', label: 'Welcome bonus', amount: WELCOME, at: Date.now(), order: null }] };
+  const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(wallet)); } catch {} };
+  persist();
+
+  const when = t => new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+
+  function credit(amount, label, order) {
+    wallet.balance += amount;
+    wallet.txns.unshift({ type: 'credit', label, amount, at: Date.now(), order: order || null });
+    wallet.txns = wallet.txns.slice(0, 50);
+    persist(); refresh();
+  }
+  function debit(amount, label, order) {
+    wallet.balance -= amount;
+    wallet.txns.unshift({ type: 'debit', label, amount, at: Date.now(), order: order || null });
+    wallet.txns = wallet.txns.slice(0, 50);
+    persist(); refresh();
+  }
+
+  /* ---------- UI: header chip ---------- */
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'wl-chip hidden';
+  chip.setAttribute('aria-label', 'Open wallet');
+  chip.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h13v4"/><path d="M3 7v11a2 2 0 0 0 2 2h15V9H5a2 2 0 0 1-2-2z"/><circle cx="16.5" cy="14.5" r="1" fill="currentColor"/></svg><span>Wallet</span><b id="wl-chip-bal"></b>`;
+  const headerEnd = document.querySelector('.header-end');
+  if (headerEnd) headerEnd.insertBefore(chip, headerEnd.querySelector('.profile') || headerEnd.firstChild);
+
+  /* ---------- UI: wallet popup ---------- */
+  const modal = document.createElement('div');
+  modal.id = 'wallet-modal';
+  modal.className = 'wl-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'wl-title');
+  modal.innerHTML = `
+    <div class="wl-card">
+      <button class="wl-close" aria-label="Close wallet">×</button>
+      <h2 id="wl-title">FusionWallet</h2>
+      <div class="wl-balance"><small>Available balance</small><b id="wl-big"></b></div>
+      <div class="wl-add">
+        <span>Add money</span>
+        <div class="wl-quick">
+          <button type="button" data-amt="100">+ ₹100</button>
+          <button type="button" data-amt="500">+ ₹500</button>
+          <button type="button" data-amt="1000">+ ₹1000</button>
+        </div>
+        <form class="wl-custom"><input type="number" min="1" max="${MAX_ADD}" step="1" placeholder="Other amount" aria-label="Other amount"><button>Add</button></form>
+      </div>
+      <h3>Recent activity</h3>
+      <div id="wl-list"></div>
+      <small class="wl-note">Demo wallet. No real money is used. Choose "Wallet" as the payment method at checkout.</small>
+    </div>`;
+  document.body.append(modal);
+
+  const openWallet = () => { refresh(); modal.classList.add('open'); };
+  const closeWallet = () => modal.classList.remove('open');
+  chip.onclick = openWallet;
+  modal.querySelector('.wl-close').onclick = closeWallet;
+  modal.addEventListener('click', e => { if (e.target === modal) closeWallet(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeWallet(); });
+
+  function addMoney(n) {
+    n = Math.floor(Number(n));
+    if (!n || n < 1) return toast('Enter a valid amount');
+    if (n > MAX_ADD) return toast(`You can add up to ${money(MAX_ADD)} at a time`);
+    credit(n, 'Added to wallet');
+    toast(`${money(n)} added to your wallet`);
+  }
+  modal.querySelectorAll('[data-amt]').forEach(b => b.onclick = () => addMoney(b.dataset.amt));
+  modal.querySelector('.wl-custom').addEventListener('submit', e => {
+    e.preventDefault();
+    const i = e.target.querySelector('input');
+    addMoney(i.value);
+    i.value = '';
+  });
+
+  /* ---------- render ---------- */
+  function refresh() {
+    const bal = money(wallet.balance);
+    $('wl-chip-bal').textContent = bal;
+    $('wl-big').textContent = bal;
+    $('wl-list').innerHTML = wallet.txns.length
+      ? wallet.txns.slice(0, 15).map(t =>
+        `<div class="wl-row"><div>${safe(t.label)}<small>${when(t.at)}</small></div><b class="${t.type === 'credit' ? 'cr' : 'dr'}">${t.type === 'credit' ? '+' : '-'}${money(t.amount)}</b></div>`).join('')
+      : '<p class="wl-empty">No activity yet.</p>';
+    syncOption();
+  }
+
+  /* add / update the "Wallet" choice in the checkout payment list */
+  function syncOption() {
+    const sel = $('payment-mode');
+    if (!sel) return;
+    let o = [...sel.options].find(x => x.value === 'Wallet');
+    if (!o) { o = new Option('', 'Wallet'); sel.add(o, 1); }
+    o.text = `Wallet (${money(wallet.balance)} available)`;
+  }
+
+  /* show the chip only for signed-in customers */
+  const appView = $('app-view');
+  function vis() {
+    const show = !appView.classList.contains('hidden') && currentUser && currentUser.role === 'customer';
+    chip.classList.toggle('hidden', !show);
+  }
+  new MutationObserver(vis).observe(appView, { attributes: true, attributeFilter: ['class'] });
+
+  /* ---------- hook into checkout ---------- */
+  const _place = window.handlePlaceOrder;
+  window.handlePlaceOrder = function (e) {
+    if ($('payment-mode').value !== 'Wallet') return _place(e);
+    e.preventDefault();
+    if (!cart.length) return;
+    const need = totals().total;
+    if (need > wallet.balance) {
+      toast(`Not enough balance. Add ${money(need - wallet.balance)} more.`);
+      openWallet();
+      return;
+    }
+    const before = orders.length;
+    _place(e);
+    if (orders.length > before) {
+      const o = orders[0];
+      debit(o.total, `Paid for ${o.id}`, o.id);
+      toast(`${money(o.total)} paid from wallet`);
+    }
+  };
+
+  /* ---------- refunds ---------- */
+  function refund(o) {
+    if (!o || o.payment !== 'Wallet') return;
+    if (wallet.txns.some(t => t.type === 'credit' && t.order === o.id)) return;
+    credit(o.total, `Refund for ${o.id}`, o.id);
+    toast(`${money(o.total)} refunded to your wallet`);
+  }
+  const _cancel = window.cancelOrder;
+  window.cancelOrder = function (id) {
+    const o = orders.find(x => x.id === id);
+    const was = o && o.status;
+    _cancel(id);
+    if (o && was === 'PLACED' && o.status === 'CANCELLED') refund(o);
+  };
+  const _status = window.updateOrderStatus;
+  window.updateOrderStatus = function (id, s) {
+    const o = orders.find(x => x.id === id);
+    const was = o && o.status;
+    _status(id, s);
+    if (o && was !== 'CANCELLED' && o.status === 'CANCELLED') refund(o);
+  };
+
+  /* keep the payment option fresh whenever the cart re-renders */
+  const _renderCart = window.renderCart;
+  window.renderCart = function () { _renderCart(); syncOption(); };
+
+  refresh();
+  vis();
+})();

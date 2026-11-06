@@ -72,7 +72,11 @@
 
   /* show the bot only while signed in */
   const appView = $('app-view');
-  const sync = () => root.classList.toggle('hidden', appView.classList.contains('hidden'));
+  const sync = () => {
+    const out = appView.classList.contains('hidden');
+    root.classList.toggle('hidden', out);
+    if (out) { panel.classList.remove('open'); log.replaceChildren(); }   /* signed out: forget the chat */
+  };
   new MutationObserver(sync).observe(appView, { attributes: true, attributeFilter: ['class'] });
   sync();
 
@@ -84,7 +88,7 @@
   }
 
   function greet() {
-    const name = currentUser?.full_name || 'there';
+    const name = (currentUser?.full_name || '').split(' ')[0] || 'there';
     say(`Hi ${safe(name)}! I'm <b>FusionBot</b>. I can recommend dishes, add items to your cart, apply promo codes and track orders. Type <b>help</b> to see everything.`);
   }
 

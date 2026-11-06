@@ -211,7 +211,17 @@ function showAuthError(message) {
   if (!error) return;
 
   error.textContent = message;
-  error.classList.remove('hidden');
+  error.classList.add('error');
+  error.classList.remove('notice', 'hidden');
+}
+
+function showAuthNotice(message) {
+  const error = el('login-error');
+  if (!error) return;
+
+  error.textContent = message;
+  error.classList.remove('error', 'hidden');
+  error.classList.add('notice');
 }
 
 function clearAuthError() {
@@ -219,7 +229,8 @@ function clearAuthError() {
   if (!error) return;
 
   error.textContent = '';
-  error.classList.add('hidden');
+  error.classList.add('error', 'hidden');
+  error.classList.remove('notice');
 }
 
 function togglePasswordVisibility(btn) {
@@ -280,9 +291,11 @@ async function getUserProfile(user) {
     .eq('id', user.id)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    console.warn('Could not load profile, continuing as customer:', error.message);
+  }
 
-  return data || {
+  return (!error && data) || {
     full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
     role: 'customer'
   };
@@ -388,7 +401,7 @@ async function handleLogin(e) {
         const profile = await getUserProfile(data.user);
         await enterApp(data.user, profile);
       } else {
-        showAuthError(
+        showAuthNotice(
           'Account created. Check your email to confirm your account, then sign in.'
         );
       }
@@ -426,6 +439,16 @@ async function handleLogout() {
 
   currentUser = null;
   selectedRole = 'customer';
+
+  /* the next person on this browser must not see this person's cart or tracked order */
+  cart = [];
+  activePromo = '';
+  persistCart();
+  if (el('track-input')) el('track-input').value = '';
+  if (el('tracked-order-view')) {
+    el('tracked-order-view').classList.add('hidden');
+    el('tracked-order-view').innerHTML = '';
+  }
 
   el('app-view')?.classList.add('hidden');
   el('auth-view')?.classList.remove('hidden');
@@ -728,6 +751,10 @@ function floating() {
    checkout + orders
    ========================================================= */
 
+/* a customer only sees their own orders; the restaurant admin sees all of them */
+const canSeeOrder = o => currentUser?.role === 'admin' || (!!currentUser && o.userId === currentUser.id);
+const myOrders = () => orders.filter(canSeeOrder);
+
 function handlePlaceOrder(e) {
   e.preventDefault();
 
@@ -743,6 +770,7 @@ function handlePlaceOrder(e) {
 
   const o = {
     id: 'ORD-' + nextOrder++,
+    userId: currentUser?.id || null,
     customer: el('cust-name').value.trim(),
     phone,
     address: el('cust-address').value.trim(),
@@ -801,7 +829,7 @@ const statusPill = s =>
 
 function searchOrder() {
   const id = el('track-input').value.trim().toUpperCase();
-  const o = orders.find(x => x.id === id);
+  const o = orders.find(x => x.id === id && canSeeOrder(x));
   const box = el('tracked-order-view');
 
   box.classList.remove('hidden');
@@ -823,7 +851,7 @@ function searchOrder() {
 }
 
 function cancelOrder(id) {
-  const o = orders.find(x => x.id === id);
+  const o = orders.find(x => x.id === id && canSeeOrder(x));
 
   if (o && o.status === 'PLACED') {
     o.status = 'CANCELLED';
@@ -836,11 +864,13 @@ function cancelOrder(id) {
 }
 
 function renderOrders() {
-  el('total-orders-count').textContent =
-    `${orders.length} order${orders.length === 1 ? '' : 's'}`;
+  const list = myOrders();
 
-  el('all-orders-list').innerHTML = orders.length
-    ? orders.map(o => `<div class="history">
+  el('total-orders-count').textContent =
+    `${list.length} order${list.length === 1 ? '' : 's'}`;
+
+  el('all-orders-list').innerHTML = list.length
+    ? list.map(o => `<div class="history">
         <div><b>${o.id}</b><small>${safe(o.created)} · ${o.items.reduce((s, x) => s + x.quantity, 0)} items</small></div>
         <b>${money(o.total)}</b>${statusPill(o.status)}
         <button class="link" onclick="el('track-input').value='${o.id}';searchOrder();window.scrollTo({top:0,behavior:'smooth'})">Track</button>
@@ -1026,8 +1056,6 @@ el('receipt-modal')?.addEventListener('click', e => {
 });
 
 async function boot() {
-  document.documentElement.dataset.theme = load('ff_theme', 'light');
-
   if (typeof foodFusionSupabase === 'undefined') {
     console.error('Supabase client is not initialized. Check script loading order.');
     showAuthError('Unable to connect to the authentication service. Please refresh the page.');
